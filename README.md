@@ -34,5 +34,6 @@ pip install -U pip slack-bolt
 export SLACK_APP_TOKEN="xapp-"
 export SLACK_BOT_TOKEN="xoxb-"
 export DEFAULT_SLACK_CHANNEL="任意"
+export PRODUCTION="true"
 python app.py
 ```
