@@ -1,0 +1,14 @@
+version: '2'
+services:
+  mu.slackbot:
+    build: .
+    tty: true
+    container_name: slack-bot
+    environment:
+      - DEFAULT_SLACK_CHANNEL
+      - SLACK_BOT_TOKEN
+      - SLACK_APP_TOKEN
+    command: python main.py
+    working_dir: /app/src
+    volumes:
+      - $PWD:/app/src
