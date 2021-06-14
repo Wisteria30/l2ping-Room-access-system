@@ -5,4 +5,4 @@ WORKDIR /app/src
 # RUN apt-get update && apt-get -y install bluetooth && \
 #     rm -rf /var/lib/apt/list/* /var/cache/apt/archives/* && \
 #     apt-get clean
-RUN pip install --upgrade pip && pip install --upgrade setuptools && pip install slack-bolt
+RUN pip install --upgrade pip && pip install --upgrade setuptools && pip install slack-bolt aiohttp

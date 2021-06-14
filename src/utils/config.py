@@ -1,18 +1,46 @@
 import os
 
 # TOKEN
-BOT_TOKEN = os.environ["SLACK_BOT_TOKEN"]
-APP_TOKEN = os.environ["SLACK_APP_TOKEN"]
 try:
-    CHANNEL_TOKEN = os.environ["DEFAULT_SLACK_CHANNEL"]
+    BOT_TOKEN = os.environ["SLACK_BOT_TOKEN"]
 except KeyError as e:
-    CHANNEL_TOKEN = None
+    print("require: export SLACK_BOT_TOKEN='xoxb-'")
+    import sys
+    sys.exit(1)
+try:
+    APP_TOKEN = os.environ["SLACK_APP_TOKEN"]
+except KeyError as e:
+    print("require: export SLACK_APP_TOKEN='xapp-'")
+    sys.exit(1)
+
+# TODO: 非同期が理解しきれていないくて現状デフォルトが設定されていないと監視できない．．．
+def set_channel_id(new_channel_id):
+    global channel_id
+    channel_id = new_channel_id
+    
+def get_channel_id():
+    global channel_id
+    return channel_id
+try:
+    _CHANNEL_ID = os.environ["DEFAULT_SLACK_CHANNEL"]
+except KeyError as e:
+    _CHANNEL_ID = None
+finally:
+    set_channel_id(_CHANNEL_ID)
+
+ROOM_NAME = ""
 try:
     # なにかしら文字が入っていたら本番環境
     PRODUCTION = bool(os.environ["PRODUCTION"])
+    if PRODUCTION:
+        try:
+            # 本番環境なら部屋名を必須にする
+            ROOM_NAME = os.environ["ROOM_NAME"]
+        except KeyError as e:
+            print("require: export ROOM_NAME='my_room'")
+            sys.exit(1)
 except KeyError as e:
     PRODUCTION = None
-
 
     
 
@@ -20,12 +48,11 @@ except KeyError as e:
 class BotInfo():
     from slack_sdk.web import WebClient
     
-    def __init__(self, client: WebClient = None):
+    def __init__(self):
         self.__info = dict()
         self.__info['version'] = self.version = "1.0"
-        self.__setInfo__(client)
         
-    def __setInfo__(self, client: WebClient = None):
+    async def setInfo(self, client: WebClient = None):
         assert client, "引数にWebClientを設定してください"
         '''
         {'ok': True, 'url': 'xxx', 'team': 'xxx', 'user': 'xxx', 
@@ -34,7 +61,7 @@ class BotInfo():
         }
         '''
         print("\t--------- run client.auth_test() ------------")
-        res = client.auth_test()
+        res = await client.auth_test()
         if not res['ok']:
             return False    
             

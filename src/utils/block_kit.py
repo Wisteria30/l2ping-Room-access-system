@@ -23,7 +23,7 @@ def create_simple_section_from(mrkdwn: str = None) -> dict:
         }
     }
     
-def create_fields_from(*args) -> list:
+def create_fields_from(args: tuple = None) -> list:
     fields = list()
     for arg in args:
         # listなど対応
@@ -43,15 +43,18 @@ def create_fields_from(*args) -> list:
                     "text": arg
                 }
             )
+
     return fields
 
 
 def create_section_on_filed_from(
-    mrkdwn: str = None, *args: tuple
+    mrkdwn: str = None, 
+    *args: tuple
 ) -> dict:
     if not len(args):
         return create_simple_section_from(mrkdwn)
 
+    # ここら辺が原因かな
     fields = create_fields_from(args)
 
     return {
