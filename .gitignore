@@ -1,1 +1,13 @@
-secret.json
+# secret files
+secret*
+
+# python
+/**/__pycache__
+/**/.venv
+
+# for vscode
+.vscode
+.env
+
+# for mac
+/**/.DS_Store
