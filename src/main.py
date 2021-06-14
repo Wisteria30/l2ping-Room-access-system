@@ -1,14 +1,11 @@
-'''
+"""
 ルートファイル（runするだけ）
-'''
+"""
 import asyncio
-from mu_bot import run_slack_bot
+
 from l2ping import run_l2ping
-from utils.config import (
-    BOT_TOKEN,
-    APP_TOKEN,
-    get_channel_id
-)
+from mu_bot import run_slack_bot
+from utils.config import APP_TOKEN, BOT_TOKEN, get_channel_id
 
 
 async def main():
@@ -20,6 +17,7 @@ async def main():
     l2ping = asyncio.create_task(run_l2ping())
     await slack_bot
     await l2ping
-    
+
+
 if __name__ == "__main__":
     asyncio.run(main())

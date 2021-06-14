@@ -30,10 +30,20 @@ docker-compose up
 cd src
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -U pip slack-bolt
+pip install -U pip slack-bolt aiohttp
 export SLACK_APP_TOKEN="xapp-"
 export SLACK_BOT_TOKEN="xoxb-"
 export DEFAULT_SLACK_CHANNEL="任意"
 export PRODUCTION="true"
 python main.py
 ```
+
+# TODO
+- [ ] リファクタリング
+    - 何も考えず実装したせいで，シーケンス図的にもぐちゃぐちゃになっているので，根本的にファイルの構成を見直す．（クラスにするとか）
+- [ ] 本当に退出したのか？
+    - トイレじゃないのかとかを考えたときにボタンで本当に退出したかを聞くようにする（ボタンの通知とそれに付随したアクションの追加）
+    - メッセージに気がつかないときがあると思うで，3回連続でpingがNGだった場合はこちらでcloseと判断する（とか）
+- [ ] Slack-Botからl2pingを制御
+    - 現状：l2pingとSlack-Botを非同期のタスクとしてmainから同時に起動している
+    - Slack-Botから監視開始と停止をできればいいかなと．メンションでstart，stopは認識できるようにはしている（スラッシュコマンドとかショートカットコマンドでもいいかも！）

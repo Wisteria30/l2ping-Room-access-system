@@ -1,4 +1,4 @@
-version: '2'
+version: "2"
 services:
   mu.slackbot:
     build: .
@@ -8,7 +8,10 @@ services:
       - DEFAULT_SLACK_CHANNEL
       - SLACK_BOT_TOKEN
       - SLACK_APP_TOKEN
-    command: python src/main.py
+    # lintは一旦ごめんなさい．．．（なんちゃってtypingでエラーばかりでるので．）
+    command: >
+      /bin/bash -c 'pysen run format 
+      && python src/main.py'
     working_dir: /app/src
     volumes:
       - $PWD:/app/src
