@@ -11,3 +11,7 @@ secret*
 
 # for mac
 /**/.DS_Store
+
+# test files
+/**/*sample*
+/**/*test*
