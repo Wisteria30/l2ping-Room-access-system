@@ -10,8 +10,9 @@ services:
       - SLACK_APP_TOKEN
     # lintは一旦ごめんなさい．．．（なんちゃってtypingでエラーばかりでるので．）
     command: >
-      /bin/bash -c 'pysen run format 
-      && python src/main.py'
-    working_dir: /app/src
+      /bin/bash -c 'pysen run format
+      && pysen run lint
+      && python app/main.py'
+    working_dir: /src
     volumes:
-      - $PWD:/app/src
+      - $PWD:/src

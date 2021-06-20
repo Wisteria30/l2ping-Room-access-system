@@ -1,5 +1,5 @@
 FROM python:3.9
-WORKDIR /app/src
+WORKDIR /src
 
 # TODO: いろいろ試したけど，docker上からl2pingするのが難しそうなので，開発環境では送った定のコードを記述
 # RUN apt-get update && apt-get -y install bluetooth && \

@@ -1,55 +1,32 @@
 import asyncio
-import atexit
-from typing import Dict, List
+import subprocess
+from typing import List
+
+from config import Config
 
 # 密結合すぎてやばい．．．
-from mu_bot import send_message
-from utils.block_kit import create_header_from, create_simple_section_from
-from utils.config import PRODUCTION, ROOM_NAME
-
-
-# スレッドのタイムスタンプを管理する
-class Status(object):
-    @classmethod
-    def instance(cls):
-        # シングルトン
-        if not hasattr(cls, "_instance"):
-            cls._instance = cls()
-        return cls._instance
-
-    def __init__(self):
-        self.ts: str = None
-        # 0は不在, 1は在籍
-        self.monitor_user: dict = None
-        self.room_status: str = None
-
-    def update_room_status(self):
-        """init"""
-        self.room_status["is_open"] = 1 in self.monitor_user.values()
-        self.room_status["enter_user"] = self.room_status["exit_user"] = list()
-        # 入室状況を更新する
-        for user, status in self.monitor_user.items():
-            if status:
-                self.room_status["enter_user"].append(user)
-            else:
-                self.room_status["exit_user"].append(user)
+from slack_bot import send_message
+from slack_bot.block_kit import create_header_from, create_simple_section_from
+from surveillance.status import Status
+from util import JSON
 
 
 # ユーザとmacアドレスのjsonを取得する
 def load_mac_address_from(
-    filename: str = None,
-) -> dict:
-    if not PRODUCTION:
+    filename: str,
+) -> JSON:
+    if not Config().PRODUCTION:
         return {
             "test1": "00:00:5e:00:53:00",
             "test2": "00:00:5e:00:53:01",
             "test3": "00:00:5e:00:53:02",
         }
     try:
-        import json
+        with open("secret.json") as f:
+            import json
 
-        json_file = json.load(f)
-        return json_file["mac_address"]
+            mac_address_dict: JSON = json.load(f)
+        return mac_address_dict
     except FileNotFoundError:
         print("Can't load config file.")
         import sys
@@ -58,21 +35,19 @@ def load_mac_address_from(
 
 
 # 一定時間でl2pingを実行して，変更があればslack-botへ通知
-def l2ping(
-    mac_address_list: list = None,
-) -> List[List[str]]:
+def l2ping(mac_address_dict: JSON) -> List[List[str]]:
 
-    assert mac_address_list, "require : mac_address_list"
+    assert mac_address_dict, "require : mac_address_dict"
 
     new_enter_user = list()
     new_exit_user = list()
-    monitor_user = Status.instance().monitor_user
+    monitor_user = Status().monitor_user
 
     print("------------ start ------------")
     for (
         user,
         mac_address,
-    ) in mac_address_list.items():
+    ) in mac_address_dict.items():
         cmd = "sudo l2ping -c 1 " + mac_address
         try:
             print("------------ {} Connection start ------------".format(user))
@@ -81,8 +56,8 @@ def l2ping(
                 monitor_user[user] = 1
                 new_enter_user.append(user)
                 print("{} 入室".format(user))
-        # ping失敗
-        except:
+        # ping失敗（subprocess.CalledProcessError？ひとまずExceptionでmypy通す）
+        except Exception:
             if monitor_user[user] == 1:
                 monitor_user[user] = 0
                 new_exit_user.append(user)
@@ -91,27 +66,26 @@ def l2ping(
     return [new_enter_user, new_exit_user]
 
 
-# 開発環境用l2ping
-def l2ping_debug(
-    mac_address_list: list = None,
-) -> List[List[str]]:
+# 入退室を模倣するためにグローバルでカウントを持っておく（try-exceptだとmypyにnot definedって怒られる）
+user_count = 0
 
-    assert mac_address_list, "require : mac_address_list"
+
+# 開発環境用l2ping
+def l2ping_debug(mac_address_dict: JSON) -> List[List[str]]:
+
+    assert mac_address_dict, "require : mac_address_dict"
 
     # 入退室を模倣するためにグローバルでカウントを持っておく
-    global count
-    try:
-        count += 1
-    except NameError as e:
-        count = 1
+    global user_count
+    user_count += 1
 
     new_enter_user = list()
     new_exit_user = list()
-    monitor_user = Status.instance().monitor_user
-    for i, (user, mac_address) in enumerate(mac_address_list.items()):
+    monitor_user = Status().monitor_user
+    for user in mac_address_dict.keys():
 
         # 3回に一回退室
-        if count != 0 and count % 3 == 0:
+        if user_count != 0 and user_count % 3 == 0:
             monitor_user[user] = 0
             new_exit_user.append(user)
         # 退室以外入室処理
@@ -125,44 +99,49 @@ def l2ping_debug(
 # l2ping結果を整形
 def create_l2ping_result(
     new_enter_user: List[str], new_exit_user: List[str]
-) -> dict:
+) -> JSON:
     l2ping_result = {
         "room_state": dict(),
-        "user_status": list(),
-        "thread_ts": Status.instance().ts,  # NoneならOpen，それ以外はスレッドに返信する
+        # "user_status": list(),
+        "thread_ts": Status().ts,  # NoneならOpen，それ以外はスレッドに返信する
     }
+    # "Collection[str]" has no attribute "append"  [attr-defined]を回避
+    user_status: List[str] = list()
 
-    monitor_user = Status.instance().monitor_user
-    room_status = Status.instance().room_status
+    monitor_user = Status().monitor_user
+    room_status = Status().room_status
     # 整形
     if not room_status["is_open"] and any(monitor_user.values()):
         room_status["is_open"] = True
         # result += "Open\n"
         l2ping_result["room_state"] = {
             "is_open": room_status["is_open"],
-            "message": f"{ROOM_NAME}:door: : Open",
+            "message": f"{Config().ROOM_NAME}:door: : Open",
         }
 
     if new_enter_user:
         for user in new_enter_user:
-            l2ping_result["user_status"].append(f"*[入室]* { user }\n")
+            user_status.append(f"*[入室]* { user }\n")
+            # l2ping_result["user_status"].append(f"*[入室]* { user }\n")
 
     if new_exit_user:
         for user in new_exit_user:
-            l2ping_result["user_status"].append(f"*[退室]* { user }\n")
+            user_status.append(f"*[退室]* { user }\n")
+            # l2ping_result["user_status"].append(f"*[退室]* { user }\n")
 
     if room_status["is_open"] and not any(monitor_user.values()):
         room_status["is_open"] = False
         l2ping_result["room_state"] = {
             "is_open": room_status["is_open"],
-            "message": f"{ROOM_NAME}:door: : Close",
+            "message": f"{Config().ROOM_NAME}:door: : Close",
         }
 
+    l2ping_result["user_status"] = user_status
     return l2ping_result
 
 
 # l2ping結果をスラックに送信するメッセージ整形
-async def send_l2ping_result_from(l2ping_result: dict) -> None:
+async def send_l2ping_result_from(l2ping_result: JSON) -> None:
 
     # 送信しないなら即座に返す
     if not (l2ping_result["room_state"] or l2ping_result["user_status"]):
@@ -178,7 +157,7 @@ async def send_l2ping_result_from(l2ping_result: dict) -> None:
                 ]
             )
             # スレッドのタイムスタンプを設定
-            Status.instance().ts = req["ts"]
+            Status().ts = req["ts"]
             # 送信の安定性のために少し待機
             await asyncio.sleep(1)
 
@@ -191,7 +170,7 @@ async def send_l2ping_result_from(l2ping_result: dict) -> None:
 
         await send_message(
             blocks=user_blocks,
-            thread_ts=Status.instance().ts,
+            thread_ts=Status().ts,
         )
         # 送信の安定性のために少し待機
         await asyncio.sleep(1)
@@ -206,38 +185,38 @@ async def send_l2ping_result_from(l2ping_result: dict) -> None:
                 blocks=[
                     create_header_from(l2ping_result["room_state"]["message"])
                 ],
-                thread_ts=Status.instance().ts,
+                thread_ts=Status().ts,
                 reply_broadcast=True,
             )
             # スレッドのタイムスタンプを一応リセット
-            Status.instance().ts = None
+            Status().ts = ""
 
 
 async def run_l2ping(time: int = 5 * 60) -> None:
     # for dubug
-    if not PRODUCTION:
+    if not Config().PRODUCTION:
         time = 5
 
     await send_message(
         blocks=[
             create_simple_section_from(
-                f"*========== {ROOM_NAME} : 入退室監視開始========== *"
+                f"*========== {Config().ROOM_NAME} : 入退室監視開始========== *"
             )
         ]
     )
 
     """init"""
-    mac_address_list = load_mac_address_from("secret.json")
-    Status.instance().monitor_user = {key: 0 for key in mac_address_list}
-    Status.instance().room_status = {
+    # 以下をコンフィグに持っていくのもいいけど，そうすると常にmac_address_listが必要になる？
+    mac_address_dict = load_mac_address_from("secret.json")
+    Status().monitor_user = {key: 0 for key in mac_address_dict}
+    Status().room_status = {
         "is_open": False,
-        "room_name": ROOM_NAME if PRODUCTION else "DebugRoom",
+        "ROOM_NAME": Config().ROOM_NAME if Config().PRODUCTION else "DebugRoom",
         "enter_user": [],
     }
-    l2ping_func = l2ping if PRODUCTION else l2ping_debug
+    l2ping_func = l2ping if Config().PRODUCTION else l2ping_debug
 
     try:
-        room_status = Status.instance().room_status
         """run"""
         while True:
 
@@ -247,19 +226,19 @@ async def run_l2ping(time: int = 5 * 60) -> None:
             (
                 new_enter_user,
                 new_exit_user,
-            ) = l2ping_func(mac_address_list)
+            ) = l2ping_func(mac_address_dict)
 
             """create and send message to slack"""
             await send_l2ping_result_from(
                 create_l2ping_result(new_enter_user, new_exit_user)
             )
-            Status.instance().update_room_status()
+            Status().update_room_status()
 
             print(
-                f"------------ monitor user ------------\n{Status.instance().monitor_user}"
+                f"------------ monitor user ------------\n{Status().monitor_user}"
             )
             print(
-                f"------------ room_status ------------\n{Status.instance().room_status}"
+                f"------------ room_status ------------\n{Status().room_status}"
             )
             print("========= end l2ping ==========")
             print(f"========= sleep {time}sec ==========")
@@ -271,7 +250,7 @@ async def run_l2ping(time: int = 5 * 60) -> None:
         await send_message(
             blocks=[
                 create_simple_section_from(
-                    f"*========== {ROOM_NAME} : 入退室監視終了 ==========*"
+                    f"*========== {Config().ROOM_NAME} : 入退室監視終了 ==========*"
                 )
             ]
         )

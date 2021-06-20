@@ -2,39 +2,44 @@
 メンションのコマンドはここで管理する
 """
 
-import asyncio
+from config import Config
 
-from utils.config import BotInfo, get_channel_id, set_channel_id
+# from util. import BotInfo, get_channel_id, set_channel_id
+from slack_bot.bot_info import BotInfo
+from util import JSON
 
 
 def get_message_from(
-    cmd: str = None,
-    event: dict = None,
-    botInfo: BotInfo = None,
-) -> dict:
+    cmd: str,
+    event: JSON,
+    botInfo: BotInfo,
+) -> JSON:
     assert cmd, "require cmd"
     cmd = cmd.strip()
     print(f"========= input cmd : { cmd } =========")
 
-    message = {
+    message: JSON = {
         "text": "未対応のコマンドです",
-        "blocks": None,
+        "blocks": list(),
     }
 
     if cmd == "version":
         assert botInfo, "require botInfo"
         message["text"] = f"現在のバージョンは *{ botInfo.version }* です"
     elif cmd == "enter":
-        from l2ping import Status
-        from utils.block_kit import create_enter_info_blockKit_from
+        from slack_bot.block_kit import create_enter_info_blockKit_from
+        from surveillance import Status
+
+        print("\n\n\n", Status().room_status)
+        print("\n\n\n")
 
         message["text"] = cmd
-        if Status.instance().room_status:
+        if Status().room_status:
             message["blocks"] = create_enter_info_blockKit_from(
-                Status.instance().room_status
+                Status().room_status
             )
     elif cmd == "set_channel":
-        old_id = get_channel_id()
+        old_id = Config().channel_id
         if old_id:
             message[
                 "text"
@@ -42,8 +47,8 @@ def get_message_from(
         else:
             message["text"] = f"<{event['channel']}>を送信先チャンネルとして登録しました:+1:"
 
-        set_channel_id(event["channel"])
-        print("set channel to", get_channel_id())
+        Config().channel_id = event["channel"]
+        print("set channel to", Config().channel_id)
     # TODO: 入退室の開始と終了を割り込めるようにする
     elif cmd == "start":
         message[

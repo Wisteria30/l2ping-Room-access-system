@@ -27,7 +27,7 @@ docker-compose up
 # 本番環境
 今どうやっているかわからないので，仮にvenvを使っていると仮定
 ```sh
-cd src
+cd app
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -U pip slack-bolt aiohttp
@@ -39,7 +39,7 @@ python main.py
 ```
 
 # TODO
-- [ ] リファクタリング
+- [x] リファクタリング
     - 何も考えず実装したせいで，シーケンス図的にもぐちゃぐちゃになっているので，根本的にファイルの構成を見直す．（クラスにするとか）
 - [ ] 本当に退出したのか？
     - トイレじゃないのかとかを考えたときにボタンで本当に退出したかを聞くようにする（ボタンの通知とそれに付随したアクションの追加）
