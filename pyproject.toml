@@ -1,0 +1,21 @@
+# https://pypi.org/project/pysen/
+# pysen run format && pysen run lint
+
+[tool.pysen]
+version = "0.9"
+
+[tool.pysen.lint]
+# pysen run format
+enable_black = true
+enable_flake8 = true
+enable_isort = true
+enable_mypy = true
+mypy_preset = "strict"
+line_length = 80
+py_version = "py38"
+[tool.pysen.lint.source]
+  exclude_globs = ["**/*sample/"]
+[tool.pysen.lint.mypy_modules."pysen.scripts"]
+  preset = "entry"
+[[tool.pysen.lint.mypy_targets]]
+  paths = ["app/"]
