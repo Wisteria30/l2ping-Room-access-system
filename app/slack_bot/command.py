@@ -30,25 +30,29 @@ def get_message_from(
         from slack_bot.block_kit import create_enter_info_blockKit_from
         from surveillance import Status
 
-        print("\n\n\n", Status().room_status)
-        print("\n\n\n")
-
         message["text"] = cmd
         if Status().room_status:
             message["blocks"] = create_enter_info_blockKit_from(
                 Status().room_status
             )
     elif cmd == "set_channel":
-        old_id = Config().channel_id
-        if old_id:
+        # 冷静にこれ権限を付けないと誰でも変えれてしまう
+        # TODO: 権限がある人が実行したかどうかを判断した上で変更可能にする（Falseの部分に権限関係を書けばいいはず）
+        if event["user"] in ["xxxxx", "xxxxx"]:
+            old_id = Config().channel_id
+            if old_id:
+                message[
+                    "text"
+                ] = f"送信先チャンネルを<{old_id}>から<{event['channel']}>に変更しました:+1:"
+            else:
+                message["text"] = f"<{event['channel']}>を送信先チャンネルとして登録しました:+1:"
+
+            Config().channel_id = event["channel"]
+            print("set channel to", Config().channel_id)
+        else:
             message[
                 "text"
-            ] = f"送信先チャンネルを<{old_id}>から<{event['channel']}>に変更しました:+1:"
-        else:
-            message["text"] = f"<{event['channel']}>を送信先チャンネルとして登録しました:+1:"
-
-        Config().channel_id = event["channel"]
-        print("set channel to", Config().channel_id)
+            ] = f"<@{event['user']}>さんには送信チャンネルを変更する権限がありません:man-gesturing-no:"
     # TODO: 入退室の開始と終了を割り込めるようにする
     elif cmd == "start":
         message[

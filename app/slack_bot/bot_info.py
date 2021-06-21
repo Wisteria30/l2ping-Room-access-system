@@ -10,7 +10,7 @@ from util import Singleton
 class BotInfo(Singleton):
     def setup(self) -> None:
         self.__info = dict()
-        self.__info["version"] = self.version = "1.0"
+        self.__info["version"] = self.version = "1.2"
 
     def setInfo(self, client: AsyncWebClient) -> bool:
         print("\t--------- run client.auth_test() ------------")

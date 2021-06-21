@@ -37,7 +37,7 @@ def create_fields_from(
     fields = list()
     for arg in args:
         # t.Listなど対応
-        if len(arg) > 1:
+        if len(arg) > 0:
             for v in arg:
                 fields.append({"type": "mrkdwn", "text": v})
 

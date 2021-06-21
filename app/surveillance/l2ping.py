@@ -1,6 +1,6 @@
 import asyncio
 import subprocess
-from typing import List
+from typing import Any, Dict, List, Union
 
 from config import Config
 
@@ -14,7 +14,7 @@ from util import JSON
 # ユーザとmacアドレスのjsonを取得する
 def load_mac_address_from(
     filename: str,
-) -> JSON:
+) -> Union[Dict[str, str], Any]:
     if not Config().PRODUCTION:
         return {
             "test1": "00:00:5e:00:53:00",
@@ -26,7 +26,7 @@ def load_mac_address_from(
             import json
 
             mac_address_dict: JSON = json.load(f)
-        return mac_address_dict
+        return mac_address_dict["mac_address"]
     except FileNotFoundError:
         print("Can't load config file.")
         import sys
@@ -67,7 +67,7 @@ def l2ping(mac_address_dict: JSON) -> List[List[str]]:
 
 
 # 入退室を模倣するためにグローバルでカウントを持っておく（try-exceptだとmypyにnot definedって怒られる）
-user_count = 0
+l2ping_run_count = 0
 
 
 # 開発環境用l2ping
@@ -76,22 +76,37 @@ def l2ping_debug(mac_address_dict: JSON) -> List[List[str]]:
     assert mac_address_dict, "require : mac_address_dict"
 
     # 入退室を模倣するためにグローバルでカウントを持っておく
-    global user_count
-    user_count += 1
+    global l2ping_run_count
+    l2ping_run_count += 1
 
     new_enter_user = list()
     new_exit_user = list()
     monitor_user = Status().monitor_user
-    for user in mac_address_dict.keys():
+    for num, user in enumerate(mac_address_dict.keys()):
 
-        # 3回に一回退室
-        if user_count != 0 and user_count % 3 == 0:
-            monitor_user[user] = 0
-            new_exit_user.append(user)
-        # 退室以外入室処理
+        # もう少しいろんな状況で実験する
+        # 3回に一回強制退室
+        if l2ping_run_count != 0 and l2ping_run_count % 3 == 0:
+            if monitor_user[user]:
+                monitor_user[user] = 0
+                new_exit_user.append(user)
+        # 初回: user3まで入室させない（1人の場合のテスト）
+        elif l2ping_run_count < 3:
+            if num == 0 and not monitor_user[user]:
+                monitor_user[user] = 1
+                new_enter_user.append(user)
+        # 2回目: 2人入室させる
+        elif l2ping_run_count >= 4 and l2ping_run_count < 6:
+            if num < 2:
+                if not monitor_user[user]:
+                    monitor_user[user] = 1
+                    new_enter_user.append(user)
+        # それ以外入室処理
         else:
-            monitor_user[user] = 1
-            new_enter_user.append(user)
+            # すでにログイン済みならばスルー
+            if not monitor_user[user]:
+                monitor_user[user] = 1
+                new_enter_user.append(user)
 
     return [new_enter_user, new_exit_user]
 

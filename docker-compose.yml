@@ -1,16 +1,17 @@
 version: "2"
 services:
   mu.slackbot:
-    build: .
+    build: ./docker
     tty: true
     container_name: slack-bot
     environment:
       - DEFAULT_SLACK_CHANNEL
       - SLACK_BOT_TOKEN
       - SLACK_APP_TOKEN
-    # lintは一旦ごめんなさい．．．（なんちゃってtypingでエラーばかりでるので．）
+    # lintで出たエラーは自動修正可能ならばformatで直される
     command: >
-      /bin/bash -c 'pysen run format
+      /bin/bash -c 'pysen run lint;
+      pysen run format
       && pysen run lint
       && python app/main.py'
     working_dir: /src

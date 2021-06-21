@@ -17,7 +17,7 @@ class Status(Singleton):
     def update_room_status(self) -> None:
         """init"""
         self.room_status["is_open"] = 1 in self.monitor_user.values()
-        self.room_status["enter_user"] = self.room_status["exit_user"] = list()
+        self.room_status["enter_user"] = list()
         # 入室状況を更新する
         for user, status in self.monitor_user.items():
             if status:
