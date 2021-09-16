@@ -1,5 +1,5 @@
 import asyncio
-import subprocess
+from datetime import datetime
 from typing import Any, Dict, List, Union
 
 from config import Config
@@ -8,6 +8,7 @@ from config import Config
 from slack_bot import send_message
 from slack_bot.block_kit import create_header_from, create_simple_section_from
 from surveillance.status import Status
+from surveillance.webhook import WebHook
 from util import JSON
 
 
@@ -21,21 +22,11 @@ def load_mac_address_from(
             "test2": "00:00:5e:00:53:01",
             "test3": "00:00:5e:00:53:02",
         }
-    try:
-        with open("secret.json") as f:
-            import json
-
-            mac_address_dict: JSON = json.load(f)
-        return mac_address_dict["mac_address"]
-    except FileNotFoundError:
-        print("Can't load config file.")
-        import sys
-
-        sys.exit(1)
+    return Config().secret_json["mac_address"]
 
 
 # 一定時間でl2pingを実行して，変更があればslack-botへ通知
-def l2ping(mac_address_dict: JSON) -> List[List[str]]:
+async def l2ping(mac_address_dict: JSON) -> List[List[str]]:
 
     assert mac_address_dict, "require : mac_address_dict"
 
@@ -49,19 +40,25 @@ def l2ping(mac_address_dict: JSON) -> List[List[str]]:
         mac_address,
     ) in mac_address_dict.items():
         cmd = "sudo l2ping -c 1 " + mac_address
-        try:
-            print("------------ {} Connection start ------------".format(user))
-            proc = subprocess.check_output(cmd.split()).decode()
-            if "1 received" in proc and monitor_user[user] == 0:
-                monitor_user[user] = 1
-                new_enter_user.append(user)
-                print("{} 入室".format(user))
+        print("------------ {} Connection start ------------".format(user))
+        # https://docs.python.org/ja/3.7/library/asyncio-subprocess.html
+        proc = await asyncio.create_subprocess_shell(
+            cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await proc.communicate()
+        if (
+            stdout
+            and "1 received" in stdout.decode()
+            and monitor_user[user] == 0
+        ):
+            monitor_user[user] = 1
+            new_enter_user.append(user)
+            print("{} 入室".format(user))
         # ping失敗（subprocess.CalledProcessError？ひとまずExceptionでmypy通す）
-        except Exception:
-            if monitor_user[user] == 1:
-                monitor_user[user] = 0
-                new_exit_user.append(user)
-                print("{} 退室".format(user))
+        elif stderr and monitor_user[user] == 1:
+            monitor_user[user] = 0
+            new_exit_user.append(user)
+            print("{} 退室".format(user))
 
     return [new_enter_user, new_exit_user]
 
@@ -71,7 +68,7 @@ l2ping_run_count = 0
 
 
 # 開発環境用l2ping
-def l2ping_debug(mac_address_dict: JSON) -> List[List[str]]:
+async def l2ping_debug(mac_address_dict: JSON) -> List[List[str]]:
 
     assert mac_address_dict, "require : mac_address_dict"
 
@@ -108,11 +105,14 @@ def l2ping_debug(mac_address_dict: JSON) -> List[List[str]]:
                 monitor_user[user] = 1
                 new_enter_user.append(user)
 
+        # 実際のpingでは一人あたり5秒くらい
+        await asyncio.sleep(2)
+
     return [new_enter_user, new_exit_user]
 
 
 # l2ping結果を整形
-def create_l2ping_result(
+def create_l2ping_result_from(
     new_enter_user: List[str], new_exit_user: List[str]
 ) -> JSON:
     l2ping_result = {
@@ -155,7 +155,7 @@ def create_l2ping_result(
     return l2ping_result
 
 
-# l2ping結果をスラックに送信するメッセージ整形
+# l2ping結果をスラックとWebhookURLがあればそこに送信する
 async def send_l2ping_result_from(l2ping_result: JSON) -> None:
 
     # 送信しないなら即座に返す
@@ -167,9 +167,10 @@ async def send_l2ping_result_from(l2ping_result: JSON) -> None:
         if l2ping_result["room_state"]["is_open"]:
             print("Sending open message")
             req = await send_message(
+                text="Open message",
                 blocks=[
                     create_header_from(l2ping_result["room_state"]["message"])
-                ]
+                ],
             )
             # スレッドのタイムスタンプを設定
             Status().ts = req["ts"]
@@ -184,6 +185,7 @@ async def send_l2ping_result_from(l2ping_result: JSON) -> None:
             user_blocks.append(create_simple_section_from(m))
 
         await send_message(
+            text="Enter/exit message",
             blocks=user_blocks,
             thread_ts=Status().ts,
         )
@@ -197,6 +199,7 @@ async def send_l2ping_result_from(l2ping_result: JSON) -> None:
 
             # スレッドとチャットに対して送信
             await send_message(
+                text="Close message",
                 blocks=[
                     create_header_from(l2ping_result["room_state"]["message"])
                 ],
@@ -206,6 +209,12 @@ async def send_l2ping_result_from(l2ping_result: JSON) -> None:
             # スレッドのタイムスタンプを一応リセット
             Status().ts = ""
 
+    # 最後にアップデートしてWebhookに送信（あれば）
+    """update"""
+    Status().update_room_status()
+    if WebHook().api_url:
+        print("send to webhook", WebHook().webhook_for_room_status())
+
 
 async def run_l2ping(time: int = 5 * 60) -> None:
     # for dubug
@@ -213,11 +222,12 @@ async def run_l2ping(time: int = 5 * 60) -> None:
         time = 5
 
     await send_message(
+        text="Start surveillance",
         blocks=[
             create_simple_section_from(
-                f"*========== {Config().ROOM_NAME} : 入退室監視開始========== *"
+                f"*========== {Config().ROOM_NAME} : 入退室監視開始 ========== *"
             )
-        ]
+        ],
     )
 
     """init"""
@@ -237,17 +247,16 @@ async def run_l2ping(time: int = 5 * 60) -> None:
 
             print("========= start l2ping ==========")
 
-            """update"""
-            (
-                new_enter_user,
-                new_exit_user,
-            ) = l2ping_func(mac_address_dict)
-
-            """create and send message to slack"""
-            await send_l2ping_result_from(
-                create_l2ping_result(new_enter_user, new_exit_user)
+            """run l2ping and create result"""
+            # l2ping_func output new_enter_user and new_exit_user
+            new_enter_user, new_exit_user = await l2ping_func(mac_address_dict)
+            l2ping_result = create_l2ping_result_from(
+                new_enter_user, new_exit_user
             )
-            Status().update_room_status()
+            """send message to slack"""
+            await send_l2ping_result_from(l2ping_result)
+
+            del new_enter_user, new_exit_user, l2ping_result  # 一応
 
             print(
                 f"------------ monitor user ------------\n{Status().monitor_user}"
@@ -256,6 +265,14 @@ async def run_l2ping(time: int = 5 * 60) -> None:
                 f"------------ room_status ------------\n{Status().room_status}"
             )
             print("========= end l2ping ==========")
+
+            # 夜間のときのl2pingのインターバルを変更する
+            if datetime.now().hour >= 22 or datetime.now().hour < 8:
+                print("<< Night mode is from 10pm to 8am! >>")
+                # TODO: 8時を超えるときはその差分だけ待機して初回スキャンを8時にしたい（毎回この比較が入るのはやばそう？なので一旦パス）
+                print(f"========= [Night] sleep {time * 2}sec ==========")
+                await asyncio.sleep(time * 2)
+
             print(f"========= sleep {time}sec ==========")
 
             await asyncio.sleep(time)
@@ -263,9 +280,10 @@ async def run_l2ping(time: int = 5 * 60) -> None:
     finally:
         # dockerで強制終了するときは呼ばれないかも．
         await send_message(
+            text="Stop surveillance",
             blocks=[
                 create_simple_section_from(
                     f"*========== {Config().ROOM_NAME} : 入退室監視終了 ==========*"
                 )
-            ]
+            ],
         )
