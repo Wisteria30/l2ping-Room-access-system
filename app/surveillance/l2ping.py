@@ -39,26 +39,30 @@ async def l2ping(mac_address_dict: JSON) -> List[List[str]]:
         user,
         mac_address,
     ) in mac_address_dict.items():
-        cmd = "sudo l2ping -c 1 " + mac_address
+        cmd = "sudo l2ping -c 3 " + mac_address
         print("------------ {} Connection start ------------".format(user))
         # https://docs.python.org/ja/3.7/library/asyncio-subprocess.html
         proc = await asyncio.create_subprocess_shell(
             cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         stdout, stderr = await proc.communicate()
-        if (
+
+        """
+        ping失敗（subprocess.CalledProcessError？ひとまずExceptionでmypy通す）
+        3回pingを飛ばし中で1回でもpingに失敗すると"Recv failed: Connection reset by peer"が出力される
+        """
+        if stderr and monitor_user[user] == 1:
+            monitor_user[user] = 0
+            new_exit_user.append(user)
+            print("{} 退室".format(user))
+        elif (
             stdout
-            and "1 received" in stdout.decode()
+            and "3 received" in stdout.decode()
             and monitor_user[user] == 0
         ):
             monitor_user[user] = 1
             new_enter_user.append(user)
             print("{} 入室".format(user))
-        # ping失敗（subprocess.CalledProcessError？ひとまずExceptionでmypy通す）
-        elif stderr and monitor_user[user] == 1:
-            monitor_user[user] = 0
-            new_exit_user.append(user)
-            print("{} 退室".format(user))
 
     return [new_enter_user, new_exit_user]
 
