@@ -1,6 +1,7 @@
+import json
 import os
 
-from util import Singleton
+from util import JSON, Singleton
 
 
 class Config(Singleton):
@@ -18,9 +19,10 @@ class Config(Singleton):
             os.getenv("ROOM_NAME") if self.PRODUCTION else "DebugRoom"
         )
 
-        self.validate()
+        self._load_secret()
+        self._validate()
 
-    def validate(self) -> None:
+    def _validate(self) -> None:
         print("\t-- validate start -- ")
         assert self.BOT_TOKEN, "require: export SLACK_BOT_TOKEN='xoxb-'"
         assert self.APP_TOKEN, "require: export SLACK_APP_TOKEN='xapp-'"
@@ -39,6 +41,16 @@ class Config(Singleton):
         print("\t-- validate end -- ")
         self.show_config()
 
+    def _load_secret(self) -> None:
+        try:
+            with open("secret.json") as f:
+                self.secret_json: JSON = json.load(f)
+        except FileNotFoundError:
+            print("Can't load config file.")
+            import sys
+
+            sys.exit(1)
+
     def show_config(self) -> None:
         print("\t-- show config -- ")
         print("BOT_TOKEN :", self.BOT_TOKEN)
@@ -48,6 +60,7 @@ class Config(Singleton):
             print("[PRODUCTION] ROOM_NAME :", self.ROOM_NAME)
         else:
             print("ROOM_NAME:", self.ROOM_NAME)
+        print("WEBHOOK_URL :", self.secret_json["webhook"]["url"])
 
 
 if __name__ == "__main__":
