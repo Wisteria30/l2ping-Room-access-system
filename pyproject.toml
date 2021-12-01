@@ -2,7 +2,7 @@
 # pysen run format && pysen run lint
 
 [tool.pysen]
-version = "0.9"
+version = "0.10.1"
 
 [tool.pysen.lint]
 # pysen run format
